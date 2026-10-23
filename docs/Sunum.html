@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Connect 4 GUI — Proje Sunumu</title>
+<style>
+  /* ===================== TEMA & DEĞİŞKENLER ===================== */
+  :root{
+    --bg:#070b18;          /* oyunun arka plan rengi */
+    --board:#0c1a45;       /* tahta lacivert */
+    --p1:#ff3b5c;          /* Oyuncu 1 diski */
+    --p2:#ffd000;          /* Oyuncu 2 diski */
+    --glow:#00d4ff;        /* mavi neon vurgu */
+    --accent:#7c6cff;      /* mor vurgu */
+    --text:#eceff1;
+    --dim:#7c93a6;
+    --card:rgba(255,255,255,.05);
+    --card-bd:rgba(0,212,255,.25);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+    font-family:"Segoe UI",system-ui,sans-serif;}
+
+  /* ===================== ARKA PLAN ANİMASYONU ===================== */
+  #bg{position:fixed;inset:0;z-index:0}
+  .vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+    background:radial-gradient(circle at 50% 45%,transparent 55%,#000a 100%)}
+
+  /* ===================== SLAYT YAPISI ===================== */
+  .deck{position:relative;z-index:2;height:100%;width:100%}
+  .slide{position:absolute;inset:0;display:flex;flex-direction:column;
+    justify-content:center;align-items:center;padding:5vh 7vw;
+    opacity:0;visibility:hidden;transform:translateY(40px) scale(.98);
+    transition:opacity .6s ease,transform .7s cubic-bezier(.2,.8,.2,1),visibility .6s;}
+  .slide.active{opacity:1;visibility:visible;transform:none}
+  .slide.prev{transform:translateY(-40px) scale(.98)}
+
+  /* slayt içi öğeler sahneye sırayla girsin */
+  .slide.active .stagger>*{animation:rise .6s both}
+  .slide.active .stagger>*:nth-child(1){animation-delay:.08s}
+  .slide.active .stagger>*:nth-child(2){animation-delay:.18s}
+  .slide.active .stagger>*:nth-child(3){animation-delay:.28s}
+  .slide.active .stagger>*:nth-child(4){animation-delay:.38s}
+  .slide.active .stagger>*:nth-child(5){animation-delay:.48s}
+  .slide.active .stagger>*:nth-child(6){animation-delay:.58s}
+  .slide.active .stagger>*:nth-child(7){animation-delay:.68s}
+  .slide.active .stagger>*:nth-child(8){animation-delay:.78s}
+  @keyframes rise{from{opacity:0;transform:translateY(28px)}to{opacity:1;transform:none}}
+
+  h1{font-size:clamp(2.4rem,7vw,5.5rem);font-weight:800;letter-spacing:2px;
+    text-shadow:0 0 30px rgba(0,212,255,.55);line-height:1.05}
+  h2{font-size:clamp(1.6rem,4vw,3rem);font-weight:800;margin-bottom:.4em;
+    text-shadow:0 0 22px rgba(0,212,255,.4)}
+  h3{font-size:clamp(1rem,2vw,1.4rem);font-weight:700}
+  p,li{font-size:clamp(.95rem,1.7vw,1.25rem);line-height:1.6;color:#d6dee6}
+  .dim{color:var(--dim)}
+  .glow{color:var(--glow)}
+  .p1{color:var(--p1)} .p2{color:var(--p2)} .accent{color:var(--accent)}
+  .kicker{font-size:.85rem;letter-spacing:4px;text-transform:uppercase;
+    color:var(--glow);font-weight:700;margin-bottom:1.2rem}
+
+  /* kartlar */
+  .grid{display:grid;gap:1.2rem;width:100%;max-width:1100px}
+  .g2{grid-template-columns:repeat(2,1fr)}
+  .g3{grid-template-columns:repeat(3,1fr)}
+  .g4{grid-template-columns:repeat(4,1fr)}
+  .card{background:var(--card);border:1px solid var(--card-bd);border-radius:16px;
+    padding:1.3rem 1.4rem;backdrop-filter:blur(6px);transition:transform .3s,border-color .3s}
+  .card:hover{transform:translateY(-6px);border-color:var(--glow)}
+  .card .ico{font-size:2rem;margin-bottom:.5rem;display:block}
+  .card h3{margin-bottom:.35rem}
+  .card p{font-size:.95rem;color:#aeb9c4}
+  .tag{display:inline-block;padding:.25em .7em;border-radius:999px;font-size:.8rem;
+    font-weight:700;border:1px solid currentColor;margin:.2em}
+
+  /* mini connect-4 tahta animasyonu (kapak) */
+  .miniboard{display:grid;grid-template-columns:repeat(7,1fr);gap:6px;
+    background:var(--board);padding:10px;border-radius:14px;margin-top:2rem;
+    box-shadow:0 0 50px rgba(0,212,255,.35)}
+  .cell{width:clamp(22px,3.4vw,42px);height:clamp(22px,3.4vw,42px);border-radius:50%;
+    background:#050a20}
+  .cell.f1{background:var(--p1);box-shadow:0 0 12px var(--p1);animation:pop .5s both}
+  .cell.f2{background:var(--p2);box-shadow:0 0 12px var(--p2);animation:pop .5s both}
+  @keyframes pop{from{transform:translateY(-220px) scale(.6);opacity:0}
+    to{transform:none;opacity:1}}
+
+  /* katman mimarisi diyagramı */
+  .layers{display:flex;flex-direction:column;gap:.7rem;width:100%;max-width:900px}
+  .layer{border-radius:14px;padding:1rem 1.4rem;border:1px solid;display:flex;
+    justify-content:space-between;align-items:center;flex-wrap:wrap;gap:.4rem}
+  .layer b{font-size:1.15rem}
+  .layer small{color:#9fb0bd}
+  .l-ui{background:rgba(255,59,92,.08);border-color:var(--p1)}
+  .l-logic{background:rgba(0,212,255,.08);border-color:var(--glow)}
+  .l-model{background:rgba(124,108,255,.1);border-color:var(--accent)}
+  .l-net{background:rgba(255,208,0,.08);border-color:var(--p2)}
+  .l-util{background:rgba(255,255,255,.05);border-color:#7c93a6}
+
+  /* akış / pipeline */
+  .flow{display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:center}
+  .flow .node{background:var(--card);border:1px solid var(--card-bd);border-radius:12px;
+    padding:.7rem 1rem;font-weight:700;font-size:.95rem}
+  .flow .arr{color:var(--glow);font-size:1.4rem}
+
+  /* istatistik sayaçları */
+  .stat{text-align:center}
+  .stat .num{font-size:clamp(2.2rem,6vw,4rem);font-weight:800;color:var(--glow);
+    text-shadow:0 0 24px rgba(0,212,255,.5)}
+  .stat .lbl{color:var(--dim);font-size:.95rem;letter-spacing:1px}
+
+  /* kod kutusu */
+  pre{background:#0a0f22;border:1px solid var(--card-bd);border-radius:12px;
+    padding:1.1rem 1.3rem;overflow:auto;max-width:900px;width:100%;text-align:left}
+  code{font-family:"Consolas",monospace;font-size:.9rem;color:#cfe8ff;line-height:1.5}
+  .c-key{color:#ff8da1} .c-cmt{color:#5f7488;font-style:italic} .c-num{color:#ffd000}
+
+  /* ===================== NAVİGASYON / HUD ===================== */
+  .hud{position:fixed;z-index:10;bottom:22px;right:26px;display:flex;align-items:center;
+    gap:14px;font-size:.85rem;color:var(--dim)}
+  .nav-btn{width:42px;height:42px;border-radius:50%;border:1px solid var(--card-bd);
+    background:var(--card);color:var(--text);font-size:1.2rem;cursor:pointer;
+    transition:.25s;backdrop-filter:blur(6px)}
+  .nav-btn:hover{border-color:var(--glow);box-shadow:0 0 18px rgba(0,212,255,.5);transform:scale(1.08)}
+  .progress{position:fixed;top:0;left:0;height:4px;background:linear-gradient(90deg,var(--p1),var(--p2),var(--glow));
+    z-index:11;transition:width .5s ease;box-shadow:0 0 12px var(--glow)}
+  .pager{position:fixed;bottom:24px;left:26px;z-index:10;color:var(--dim);
+    font-size:.85rem;letter-spacing:1px}
+  .dots{position:fixed;top:50%;right:18px;transform:translateY(-50%);z-index:10;
+    display:flex;flex-direction:column;gap:9px}
+  .dot{width:9px;height:9px;border-radius:50%;background:#ffffff22;cursor:pointer;transition:.25s}
+  .dot.active{background:var(--glow);box-shadow:0 0 10px var(--glow);transform:scale(1.3)}
+  .hint{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:10;
+    color:var(--dim);font-size:.8rem;animation:fade 2.5s ease-in-out infinite}
+  @keyframes fade{0%,100%{opacity:.3}50%{opacity:.9}}
+
+  .badge-row{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:center;margin-top:1rem}
+  .footer-credit{margin-top:2.2rem;color:var(--dim);font-size:.95rem;letter-spacing:1px}
+  ul.clean{list-style:none;text-align:left;max-width:760px}
+  ul.clean li{padding:.5rem 0;padding-left:2rem;position:relative}
+  ul.clean li::before{content:"▸";position:absolute;left:0;color:var(--glow);font-weight:800}
+  .two-col{display:grid;grid-template-columns:1fr 1fr;gap:2rem;max-width:1000px;text-align:left;align-items:center}
+  @media(max-width:760px){.g3,.g4,.two-col{grid-template-columns:1fr}.g2{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<canvas id="bg"></canvas>
+<div class="vignette"></div>
+<div class="progress" id="progress"></div>
+
+<div class="deck" id="deck">
+
+  <!-- ============ SLAYT 1 — KAPAK ============ -->
+  <section class="slide">
+    <div class="stagger" style="display:flex;flex-direction:column;align-items:center">
+      <div class="kicker">JAVA DERSİ • DÖNEM PROJESİ</div>
+      <h1><span class="p1">CONNECT</span> <span class="p2">4</span></h1>
+      <p style="max-width:640px;margin-top:1rem" class="dim">
+        JavaFX ile geliştirilmiş; yapay zekâya karşı, yerel iki kişilik ve
+        <span class="glow">iki ayrı bilgisayar arası ağ</span> oyunu destekleyen modern bir masaüstü oyun.
+      </p>
+      <div class="miniboard" id="coverBoard"></div>
+      <div class="footer-credit">Frontend: <b class="p1">Mustafa</b> &nbsp;•&nbsp; Backend: <b class="glow">Nawar</b> &nbsp;•&nbsp; AI &amp; Ağ: <b class="p2">Ruslan</b></div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 2 — PROJE NEDİR ============ -->
+  <section class="slide">
+    <div class="kicker">GENEL BAKIŞ</div>
+    <h2>Klasik oyun, <span class="glow">modern bir kabuk</span></h2>
+    <p style="max-width:780px;margin-bottom:2rem" class="dim">
+      6×7'lik tahtada dört taşı yan yana, dik veya çapraz dizen kazanır.
+      Biz bu basit kuralın üzerine yapay zekâ, ağ oyunu, ödül sistemi ve
+      sinematik bir arayüz inşa ettik.
+    </p>
+    <div class="grid g4 stagger">
+      <div class="card"><span class="ico">🤖</span><h3>4 Zorluk + AI</h3><p>Minimax & alfa-beta budama ile düşünen rakip.</p></div>
+      <div class="card"><span class="ico">🌐</span><h3>Ağ Oyunu</h3><p>İki bilgisayar, aynı Wi-Fi, TCP soket üzerinden.</p></div>
+      <div class="card"><span class="ico">🏆</span><h3>Ödül Sistemi</h3><p>XP, seviye, seri ve 10 farklı başarım.</p></div>
+      <div class="card"><span class="ico">🎨</span><h3>Görsel Şölen</h3><p>5 tema, açık/koyu mod, ses, animasyonlar.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 3 — EKİP ============ -->
+  <section class="slide">
+    <div class="kicker">EKİP & SORUMLULUKLAR</div>
+    <h2>Üç kişi, <span class="accent">üç katman</span></h2>
+    <div class="grid g3 stagger" style="max-width:980px;margin-top:1rem">
+      <div class="card" style="border-color:var(--p1)">
+        <span class="ico">🎨</span><h3 class="p1">Mustafa</h3>
+        <p><b>Frontend</b> — Ekranlar, animasyonlar, tema/ses, kullanıcı deneyimi (<code>ui/</code>, <code>util/</code>).</p>
+      </div>
+      <div class="card" style="border-color:var(--glow)">
+        <span class="ico">⚙️</span><h3 class="glow">Nawar</h3>
+        <p><b>Backend</b> — Oyun motoru, profil/ödül modeli, kalıcı kayıt (<code>core.logic</code>, <code>core.model</code>).</p>
+      </div>
+      <div class="card" style="border-color:var(--p2)">
+        <span class="ico">🧠</span><h3 class="p2">Ruslan</h3>
+        <p><b>AI & Ağ</b> — Minimax yapay zekâ ve TCP sunucu/istemci entegrasyonu (<code>core.network</code>).</p>
+      </div>
+    </div>
+    <p class="dim" style="margin-top:1.6rem">Sorumluluklar net ayrılmış — her katman bağımsız geliştirilip birleştirildi.</p>
+  </section>
+
+  <!-- ============ SLAYT 4 — TEKNOLOJİ ============ -->
+  <section class="slide">
+    <div class="kicker">TEKNOLOJİ YIĞINI</div>
+    <h2>Saf Java, <span class="glow">sıfır dış bağımlılık</span></h2>
+    <div class="badge-row stagger" style="margin-top:1.5rem">
+      <span class="tag glow">Java 17+</span>
+      <span class="tag p1">JavaFX (controls)</span>
+      <span class="tag p2">JavaFX (graphics / Canvas)</span>
+      <span class="tag accent">JavaFX (media)</span>
+      <span class="tag glow">java.net (TCP Socket)</span>
+      <span class="tag" style="color:#78909c">java.nio (Files)</span>
+      <span class="tag" style="color:#00e676">JPMS (module-info)</span>
+    </div>
+    <div class="grid g3 stagger" style="margin-top:2.2rem;max-width:980px">
+      <div class="card"><span class="ico">🧩</span><h3>Modüler</h3><p><code>module-info.java</code> ile temiz JPMS modül tanımı.</p></div>
+      <div class="card"><span class="ico">📦</span><h3>Kütüphanesiz</h3><p>Sesler bile çalışma anında WAV olarak üretiliyor — harici dosya yok.</p></div>
+      <div class="card"><span class="ico">🖼️</span><h3>Canvas tabanlı</h3><p>Arka plan animasyonları videolu değil, tamamen çizimle.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 5 — MİMARİ ============ -->
+  <section class="slide">
+    <div class="kicker">KATMANLI MİMARİ</div>
+    <h2>Sorumlulukların <span class="accent">temiz ayrımı</span></h2>
+    <div class="layers stagger" style="margin-top:1rem">
+      <div class="layer l-ui"><b class="p1">ui/</b><small>10 ekran sınıfı • SplashScreen, MainMenu, GameScreen, NetworkLobby, Settings, Rewards, History, Disc, AnimatedBackground, Connect4App</small></div>
+      <div class="layer l-util"><b style="color:#9fb0bd">util/</b><small>SoundManager (ses) • UiHelper (yeniden kullanılabilir bileşenler)</small></div>
+      <div class="layer l-logic"><b class="glow">core.logic/</b><small>GameLogic (tahta & kazanma) • Connect4AI (minimax)</small></div>
+      <div class="layer l-model"><b class="accent">core.model/</b><small>PlayerProfile • Achievement • RewardManager</small></div>
+      <div class="layer l-net"><b class="p2">core.network/</b><small>NetworkPeer • Host • Client • Protocol • MoveResult • AddressUtil</small></div>
+      <div class="layer l-util"><b style="color:#9fb0bd">core.constants/</b><small>Config — tüm sabitler, renkler, temalar, global durum</small></div>
+    </div>
+    <p class="dim" style="margin-top:1.4rem">UI yukarıda, mantık ortada, ağ & veri altta — bağımlılıklar tek yönde aşağı akar.</p>
+  </section>
+
+  <!-- ============ SLAYT 6 — OYUN MANTIĞI ============ -->
+  <section class="slide">
+    <div class="kicker">ÇEKİRDEK • core.logic.GameLogic</div>
+    <h2>Oyunun <span class="glow">kalbi</span></h2>
+    <div class="two-col stagger">
+      <div>
+        <ul class="clean">
+          <li><b>int[6][7]</b> tahta — taş atınca yerçekimiyle en alta düşer.</li>
+          <li><b>checkWin()</b> — atılan taştan 4 yöne (yatay/dikey/2 çapraz) bakar.</li>
+          <li>Kazanan 4 hücreyi saklar → arayüzde parıldatmak için.</li>
+          <li><b>Kopya kurucu</b> — AI'nin geleceği simüle etmesi için tahtayı klonlar.</li>
+          <li>Beraberlik, sıra yönetimi ve <b>reset</b> tek yerde.</li>
+        </ul>
+      </div>
+      <div>
+        <pre><code><span class="c-cmt">// Sadece son taşın etrafına bakar — O(1) gibi hızlı</span>
+<span class="c-key">int</span> row = dropDisc(col);   <span class="c-cmt">// taşı bırak</span>
+<span class="c-key">if</span> (checkWin(row, col))    <span class="c-cmt">// 4'lü dizi var mı?</span>
+    gameOver = <span class="c-num">true</span>;
+<span class="c-key">else if</span> (isBoardFull())     <span class="c-cmt">// tahta doldu mu?</span>
+    gameOver = <span class="c-num">true</span>;     <span class="c-cmt">// → beraberlik</span>
+<span class="c-key">else</span>
+    currentPlayer = diğer;  <span class="c-cmt">// sıra rakibe</span></code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 7 — YAPAY ZEKA ============ -->
+  <section class="slide">
+    <div class="kicker">YAPAY ZEKÂ • core.logic.Connect4AI</div>
+    <h2>Geleceği <span class="p2">hesaplayan</span> rakip</h2>
+    <p class="dim" style="max-width:760px;margin-bottom:1.6rem">
+      AI, oyunu zihninde ileri sarar: olası hamleleri tek tek dener, en kötü
+      durumu varsayar ve kendine en iyi sonucu veren sütunu seçer — bu
+      <b class="glow">minimax</b>, hız için <b class="p2">alfa-beta budama</b> ile güçlendirilir.
+    </p>
+    <div class="flow stagger" style="margin-bottom:1.8rem">
+      <div class="node">Olası hamleler</div><span class="arr">→</span>
+      <div class="node">Tahtayı klonla</div><span class="arr">→</span>
+      <div class="node">Minimax (derinlik)</div><span class="arr">→</span>
+      <div class="node">α-β buda</div><span class="arr">→</span>
+      <div class="node p2">En iyi sütun</div>
+    </div>
+    <div class="grid g3 stagger" style="max-width:920px">
+      <div class="card"><span class="ico">⚡</span><h3>Kazan / Engelle</h3><p>Orta seviye bile bir hamlede kazanmayı görür, rakibin galibiyetini bloklar.</p></div>
+      <div class="card"><span class="ico">📊</span><h3>Sezgisel skor</h3><p>Yaprak düğümlerde taş dizileri (tehditler) sayılarak konum puanlanır.</p></div>
+      <div class="card"><span class="ico">🌲</span><h3>Derinlik = zorluk</h3><p>Zor 5 hamle, Uzman 7 hamle ileriyi görür.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 8 — ZORLUK ============ -->
+  <section class="slide">
+    <div class="kicker">ZORLUK SEVİYELERİ</div>
+    <h2>Herkese göre bir <span class="accent">rakip</span></h2>
+    <div class="grid g4 stagger" style="max-width:1040px;margin-top:1rem">
+      <div class="card" style="border-color:#78909c"><h3 style="color:#9fb0bd">2 Kişi</h3><p class="dim">İnsana karşı insan, aynı klavyede.</p></div>
+      <div class="card" style="border-color:#00c853"><h3 style="color:#00e676">Kolay</h3><p class="dim">Tamamen rastgele hamleler.</p></div>
+      <div class="card" style="border-color:#ffd600"><h3 class="p2">Orta</h3><p class="dim">Kazanır / engeller, yoksa ortayı seçer.</p></div>
+      <div class="card" style="border-color:#ff5722"><h3 style="color:#ff7043">Zor</h3><p class="dim">5 derinlik minimax.</p></div>
+    </div>
+    <div class="card stagger" style="border-color:#d500f9;max-width:340px;margin-top:1.2rem">
+      <h3 class="accent">Uzman</h3><p class="dim">7 derinlik — pratikte yenilmesi çok zor.</p>
+    </div>
+    <p class="dim" style="margin-top:1.4rem">Kazandığın zorluk arttıkça kazandığın XP de artar: 60 → 250.</p>
+  </section>
+
+  <!-- ============ SLAYT 9 — AĞ OYUNU ============ -->
+  <section class="slide">
+    <div class="kicker">AĞ OYUNU • core.network</div>
+    <h2>İki bilgisayar, <span class="p2">tek tahta</span></h2>
+    <div class="two-col stagger">
+      <div>
+        <ul class="clean">
+          <li><b class="p1">Sunucu (Host)</b> oyunun tek <i>doğru</i> kopyasını tutar — hakem odur.</li>
+          <li><b class="p2">İstemci (Client)</b> yalnızca aynalar; hamleyi gönderir, sonucu çizer.</li>
+          <li>Her ikisi de <code>NetworkPeer</code> arayüzünü uygular → <code>GameScreen</code> ikisini de aynı şekilde kullanır.</li>
+          <li><b>Port 5555</b> üzerinden satır-tabanlı TCP metin protokolü.</li>
+          <li>Hile imkânsız: geçerlilik kontrolü hep sunucuda.</li>
+        </ul>
+      </div>
+      <div>
+        <pre><code><span class="c-cmt">// Boru hattı üzerinden geçen mesajlar</span>
+JOIN|Ahmet
+WELCOME|<span class="c-num">2</span>|Ev Sahibi|Ahmet
+MOVE|<span class="c-num">3</span>
+RESULT|<span class="c-num">3</span>|<span class="c-num">5</span>|<span class="c-num">2</span>|<span class="c-num">1</span>|<span class="c-num">0</span>|<span class="c-num">0</span>|none
+RESET|</code></pre>
+        <div class="flow" style="margin-top:1rem">
+          <div class="node p2">İstemci</div><span class="arr">⇄</span>
+          <div class="node">TCP 5555</div><span class="arr">⇄</span>
+          <div class="node p1">Sunucu</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 10 — PROFİL & XP ============ -->
+  <section class="slide">
+    <div class="kicker">İLERLEME • core.model.PlayerProfile</div>
+    <h2>Oynadıkça <span class="glow">gelişen</span> profil</h2>
+    <p class="dim" style="max-width:760px;margin-bottom:1.6rem">
+      Her maç sonunda XP kazanılır, seviye atlanır, galibiyet serileri ve
+      istatistikler güncellenir. Hepsi <code>~/.connect4gui_profile.txt</code>
+      dosyasına yazılır — oyunu kapatsan da ilerlemen kalır.
+    </p>
+    <div class="grid g4 stagger" style="max-width:1000px">
+      <div class="card"><span class="ico">⭐</span><h3>XP & Seviye</h3><p>Artan eşiklerle seviye eğrisi (200, +80…).</p></div>
+      <div class="card"><span class="ico">🔥</span><h3>Galibiyet Serisi</h3><p>Anlık ve en iyi seri rekoru tutulur.</p></div>
+      <div class="card"><span class="ico">📋</span><h3>Maç Geçmişi</h3><p>Son 30 maç tarih damgasıyla saklanır.</p></div>
+      <div class="card"><span class="ico">💾</span><h3>Kalıcı Kayıt</h3><p>Düz metin <code>anahtar=değer</code> formatı.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 11 — ÖDÜLLER ============ -->
+  <section class="slide">
+    <div class="kicker">ÖDÜLLER • RewardManager & Achievement</div>
+    <h2>Toplanacak <span class="p2">10 kupa</span></h2>
+    <div class="grid g3 stagger" style="max-width:1000px;margin-top:.5rem">
+      <div class="card"><h3>🏅 İlk Zafer</h3><p class="dim">İlk maçını kazan • +50 XP</p></div>
+      <div class="card"><h3>🥇 Usta Stratejist</h3><p class="dim">Uzman AI'yi yen • +350 XP</p></div>
+      <div class="card"><h3>🔥 Seri Kazanan</h3><p class="dim">3 maç üst üste • +100 XP</p></div>
+      <div class="card"><h3>👑 Altın Kupa</h3><p class="dim">10. seviyeye ulaş • +300 XP</p></div>
+      <div class="card"><h3>🎨 Renk Ustası</h3><p class="dim">Tüm temaları dene • +90 XP</p></div>
+      <div class="card"><h3>⚡ Maratoncu</h3><p class="dim">25 maç oyna • +180 XP</p></div>
+    </div>
+    <p class="dim" style="margin-top:1.4rem">Kilit açıldığı an ekranda kutlama: konfeti, ses ve bildirim.</p>
+  </section>
+
+  <!-- ============ SLAYT 12 — EKRANLAR ============ -->
+  <section class="slide">
+    <div class="kicker">KULLANICI ARAYÜZÜ • ui/</div>
+    <h2>Sekiz ekran, <span class="glow">tek akış</span></h2>
+    <div class="flow stagger" style="margin:1rem 0 2rem">
+      <div class="node">Splash</div><span class="arr">→</span>
+      <div class="node p1">Ana Menü</div><span class="arr">→</span>
+      <div class="node p2">Oyun</div>
+    </div>
+    <div class="grid g4 stagger" style="max-width:1040px">
+      <div class="card"><span class="ico">🎬</span><h3>SplashScreen</h3><p>Açılış logosu, nabız gibi parıldama.</p></div>
+      <div class="card"><span class="ico">🏠</span><h3>MainMenuScreen</h3><p>İsim, zorluk, mod seçimi.</p></div>
+      <div class="card"><span class="ico">🎮</span><h3>GameScreen</h3><p>Tahta, yan panel, geri sayım, konfeti.</p></div>
+      <div class="card"><span class="ico">🌐</span><h3>NetworkLobby</h3><p>Oda kur / odaya katıl.</p></div>
+      <div class="card"><span class="ico">⚙️</span><h3>SettingsScreen</h3><p>Ses ve 5 tema kartı.</p></div>
+      <div class="card"><span class="ico">🏆</span><h3>RewardsScreen</h3><p>Başarımlar + ilerleme çubuğu.</p></div>
+      <div class="card"><span class="ico">📋</span><h3>HistoryScreen</h3><p>Geçmiş maç listesi.</p></div>
+      <div class="card"><span class="ico">⚪</span><h3>Disc</h3><p>Tek taş + kazanma animasyonu.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 13 — GÖRSEL ŞÖLEN ============ -->
+  <section class="slide">
+    <div class="kicker">DETAYLARDA GİZLİ • AnimatedBackground & SoundManager</div>
+    <h2>Sıkıcı olmayan <span class="accent">küçük dokunuşlar</span></h2>
+    <div class="grid g3 stagger" style="max-width:1020px;margin-top:.5rem">
+      <div class="card"><span class="ico">🌌</span><h3>Canlı arka plan</h3><p>Nefes alan gradyan, bokeh küreler, düşen diskler ve birbirine bağlanan parçacık takımyıldızı — tamamı Canvas.</p></div>
+      <div class="card"><span class="ico">🔊</span><h3>Üretilen sesler</h3><p>Damla, zafer, geri sayım… Her ses çalışma anında sinüs dalgasından WAV olarak üretilir.</p></div>
+      <div class="card"><span class="ico">🎯</span><h3>Taş düşme fiziği</h3><p>Spline interpolasyon + "squish" sıçrama efekti gerçekçi his verir.</p></div>
+      <div class="card"><span class="ico">🌗</span><h3>Açık / Koyu mod</h3><p>Tüm palet anında yeniden hesaplanır, tercih kaydedilir.</p></div>
+      <div class="card"><span class="ico">💡</span><h3>Dönen ipuçları</h3><p>Oyun sırasında 6 saniyede bir strateji önerisi.</p></div>
+      <div class="card"><span class="ico">📱</span><h3>Duyarlı ölçek</h3><p>Pencere boyutuna göre tahta otomatik küçülür/büyür.</p></div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 14 — SAYILAR ============ -->
+  <section class="slide">
+    <div class="kicker">SAYILARLA PROJE</div>
+    <h2>Bir bakışta <span class="glow">Connect 4</span></h2>
+    <div class="grid g4 stagger" style="max-width:1040px;margin-top:1rem">
+      <div class="stat"><div class="num" data-to="24">0</div><div class="lbl">Java sınıfı</div></div>
+      <div class="stat"><div class="num" data-to="3979">0</div><div class="lbl">satır kod</div></div>
+      <div class="stat"><div class="num" data-to="6">0</div><div class="lbl">paket / katman</div></div>
+      <div class="stat"><div class="num" data-to="8">0</div><div class="lbl">UI ekranı</div></div>
+      <div class="stat"><div class="num" data-to="5">0</div><div class="lbl">renk teması</div></div>
+      <div class="stat"><div class="num" data-to="10">0</div><div class="lbl">başarım</div></div>
+      <div class="stat"><div class="num" data-to="4">0</div><div class="lbl">AI zorluğu</div></div>
+      <div class="stat"><div class="num" data-to="0">0</div><div class="lbl">dış bağımlılık</div></div>
+    </div>
+  </section>
+
+  <!-- ============ SLAYT 15 — KAPANIŞ ============ -->
+  <section class="slide">
+    <div class="stagger" style="display:flex;flex-direction:column;align-items:center">
+      <div class="kicker">TEŞEKKÜRLER</div>
+      <h1 style="font-size:clamp(2rem,6vw,4.5rem)">Sorular? 🎉</h1>
+      <p class="dim" style="max-width:620px;margin-top:1rem">
+        Klasik bir oyunu; temiz mimari, yapay zekâ, ağ programlama ve özenli
+        bir arayüzle baştan inşa ettik. Oynamaya hazır.
+      </p>
+      <div class="miniboard" id="endBoard"></div>
+      <div class="footer-credit"><b class="p1">Mustafa</b> &nbsp;•&nbsp; <b class="glow">Nawar</b> &nbsp;•&nbsp; <b class="p2">Ruslan</b></div>
+    </div>
+  </section>
+
+</div>
+
+<!-- HUD -->
+<div class="dots" id="dots"></div>
+<div class="pager" id="pager">01 / 15</div>
+<div class="hud">
+  <button class="nav-btn" id="prev">‹</button>
+  <button class="nav-btn" id="next">›</button>
+</div>
+<div class="hint">← → ok tuşları • boşluk • tıkla</div>
+
+<script>
+/* ===================== SLAYT MOTORU ===================== */
+const slides=[...document.querySelectorAll('.slide')];
+const dotsWrap=document.getElementById('dots');
+const pager=document.getElementById('pager');
+const progress=document.getElementById('progress');
+let cur=0, countersDone=new Set();
+
+// sağdaki nokta navigasyonunu üret
+slides.forEach((_,i)=>{
+  const d=document.createElement('div');
+  d.className='dot'; d.onclick=()=>go(i);
+  dotsWrap.appendChild(d);
+});
+const dots=[...document.querySelectorAll('.dot')];
+
+function go(i){
+  if(i<0||i>=slides.length) return;
+  slides[cur].classList.remove('active');
+  slides[cur].classList.add('prev');
+  dots[cur].classList.remove('active');
+  cur=i;
+  slides[cur].classList.remove('prev');
+  slides[cur].classList.add('active');
+  dots[cur].classList.add('active');
+  pager.textContent=String(i+1).padStart(2,'0')+' / '+String(slides.length).padStart(2,'0');
+  progress.style.width=((i+1)/slides.length*100)+'%';
+  if(slides[cur].querySelector('[data-to]') && !countersDone.has(i)){
+    countersDone.add(i); runCounters(slides[cur]);
+  }
+}
+function next(){go(Math.min(cur+1,slides.length-1));}
+function prev(){go(Math.max(cur-1,0));}
+
+document.getElementById('next').onclick=next;
+document.getElementById('prev').onclick=prev;
+document.addEventListener('keydown',e=>{
+  if(['ArrowRight','ArrowDown',' ','PageDown'].includes(e.key)){e.preventDefault();next();}
+  if(['ArrowLeft','ArrowUp','PageUp'].includes(e.key)){e.preventDefault();prev();}
+  if(e.key==='Home')go(0); if(e.key==='End')go(slides.length-1);
+});
+// ekrana tıkla → ilerle (butonlar ve linkler hariç)
+document.getElementById('deck').addEventListener('click',e=>{
+  if(e.target.closest('button,a,.dot')) return; next();
+});
+
+/* sayaç animasyonu */
+function runCounters(slide){
+  slide.querySelectorAll('[data-to]').forEach(el=>{
+    const to=+el.dataset.to, dur=1100, t0=performance.now();
+    (function tick(now){
+      const p=Math.min((now-t0)/dur,1);
+      el.textContent=Math.round(to*(1-Math.pow(1-p,3)));
+      if(p<1)requestAnimationFrame(tick);
+    })(t0);
+  });
+}
+
+/* mini tahta diskleri (kapak & kapanış) */
+function fillBoard(id){
+  const wrap=document.getElementById(id); if(!wrap) return;
+  const filled={ // önceden kurulmuş dört taşlı çapraz bir pozisyon
+    '2-3':1,'3-2':1,'3-3':2,'4-1':1,'4-2':2,'4-3':1,'5-0':2,'5-1':1,'5-2':2,'5-3':1,'5-4':2
+  };
+  let n=0;
+  for(let r=0;r<6;r++)for(let c=0;c<7;c++){
+    const cell=document.createElement('div'); cell.className='cell';
+    const f=filled[r+'-'+c];
+    if(f){cell.classList.add('f'+f); cell.style.animationDelay=(n++*0.08)+'s';}
+    wrap.appendChild(cell);
+  }
+}
+fillBoard('coverBoard'); fillBoard('endBoard');
+
+// ilk slaytı etkinleştir
+go(0);
+
+/* ===================== ARKA PLAN (Canvas) ===================== */
+const cv=document.getElementById('bg'),ctx=cv.getContext('2d');
+let W,H,discs=[],parts=[];
+const COLORS=['#ff3b5c','#ffd000','#00d4ff'];
+function resize(){W=cv.width=innerWidth;H=cv.height=innerHeight;}
+addEventListener('resize',resize);resize();
+// düşen connect-4 diskleri
+for(let i=0;i<10;i++)discs.push({x:Math.random()*W,y:Math.random()*H,
+  r:12+Math.random()*16,s:.25+Math.random()*.5,d:(Math.random()-.5)*.3,
+  ph:Math.random()*6.28,amp:6+Math.random()*12,
+  col:COLORS[i%3],a:.07+Math.random()*.08});
+// parıldayan parçacıklar
+for(let i=0;i<70;i++)parts.push({x:Math.random()*W,y:Math.random()*H,
+  vx:(Math.random()-.5)*.3,vy:(Math.random()-.5)*.3-.1,
+  r:.7+Math.random()*1.8,a:.15+Math.random()*.5,
+  col:['#00d4ff','#ffffff','#7c6cff','#ff3b5c','#ffd000'][i%5]});
+function hex(c,a){const n=parseInt(c.slice(1),16);
+  return`rgba(${n>>16&255},${n>>8&255},${n&255},${a})`;}
+function loop(){
+  ctx.clearRect(0,0,W,H);
+  // arka plan gradyanı
+  const g=ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#0a1030');g.addColorStop(.5,'#070b18');g.addColorStop(1,'#03050d');
+  ctx.fillStyle=g;ctx.fillRect(0,0,W,H);
+  // diskler
+  discs.forEach(d=>{
+    d.y+=d.s;d.x+=d.d;d.ph+=.02;
+    if(d.y-d.r>H){d.y=-d.r;d.x=Math.random()*W;}
+    const x=d.x+Math.sin(d.ph)*d.amp;
+    ctx.beginPath();ctx.arc(x,d.y,d.r,0,6.28);
+    ctx.fillStyle=hex(d.col,d.a);ctx.fill();
+    ctx.beginPath();ctx.arc(x,d.y,d.r*.42,0,6.28);
+    ctx.fillStyle='rgba(7,11,24,'+(d.a*4)+')';ctx.fill();
+  });
+  // parçacıklar + bağlantılar
+  parts.forEach(p=>{p.x+=p.vx;p.y+=p.vy;
+    if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0;});
+  for(let i=0;i<parts.length;i++){
+    for(let j=i+1;j<parts.length;j++){
+      const a=parts[i],b=parts[j],dx=a.x-b.x,dy=a.y-b.y,ds=dx*dx+dy*dy;
+      if(ds<22500){const s=1-ds/22500;
+        ctx.strokeStyle='rgba(255,255,255,'+(s*.13)+')';
+        ctx.lineWidth=s*1.1;ctx.beginPath();
+        ctx.moveTo(a.x,a.y);ctx.lineTo(b.x,b.y);ctx.stroke();}
+    }
+    const p=parts[i];ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,6.28);
+    ctx.fillStyle=hex(p.col,p.a);ctx.fill();
+  }
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+</body>
+</html>

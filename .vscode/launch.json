@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "Connect4App",
+      "request": "launch",
+      "mainClass": "Connect4GUI/ui.Connect4App",
+      "projectName": "Connect4GUI"
+    },
+    {
+      "type": "java",
+      "name": "Connect4GUI",
+      "request": "launch",
+      "mainClass": "ui.Connect4App",
+      "projectName": "Connect4GUI",
+      "vmArgs": "--module-path \"C:/Users/USER/Dev/javafx-sdk-26.0.1/lib\" --add-modules javafx.controls,javafx.media,javafx.graphics --enable-native-access=javafx.graphics,javafx.media"
+    }
+  ]
+}
